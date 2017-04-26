@@ -1449,6 +1449,110 @@ public abstract class Mono<T> implements Publisher<T> {
 	}
 
 	/**
+	 * Subscribe to this Mono and another Publisher, which will be used as a trigger for
+	 * the emission of this Mono's element. That is to say, this Mono's element is delayed
+	 * until the trigger Publisher emits for the first time (or terminates empty).
+	 * <p>
+	 * Note that subsequent calls to {@link #delayUntilOther(Publisher) delayUntilOther variants}
+	 * are fused together (the triggers and source are subscribed to at the same time).
+	 * Such a chain inherits the {@code delayError} behavior of the first use of the
+	 * operator. If it is {@code delayUntilOther} then in case one of the triggers errors,
+	 * that error is propagated immediately downstream.
+	 *
+	 * @param anyPublisher the publisher which first emission or termination will trigger
+	 * the emission of this Mono's value.
+	 * @return this Mono, but delayed until the given publisher first emits or terminates.
+	 */
+	public Mono<T> delayUntilOther(Publisher<?> anyPublisher) {
+		Objects.requireNonNull(anyPublisher, "anyPublisher required");
+		if (this instanceof MonoDelayUntilOther) {
+			return ((MonoDelayUntilOther<T>) this).copyWithNewTrigger(anyPublisher);
+		}
+		return onAssembly(new MonoDelayUntilOther<>(false, this, anyPublisher));
+	}
+
+	/**
+	 * Subscribe to this Mono and another Publisher, which will be used as a trigger for
+	 * the emission of this Mono's element, mapped through a provided function.
+	 * That is to say, this Mono's element is delayed until the trigger Publisher emits
+	 * for the first time (or terminates empty). Any error is delayed until all publishers
+	 * have triggered, and multiple errors are combined into one.
+	 * <p>
+	 * Note that subsequent calls to {@link #delayUntilOtherDelayError(Publisher) delayUntilOther variants}
+	 * are fused together (the triggers and source are subscribed to at the same time).
+	 * Such a chain inherits the {@code delayError} behavior of the first use of the
+	 * operator. If it is {@code delayUntilOtherDelayError} then in case one
+	 * of the triggers errors, that error is delayed until all publishers have triggered,
+	 * and multiple errors are thus combined into one.
+	 *
+	 * @param anyPublisher the publisher which first emission or termination will trigger
+	 * the emission of this Mono's value.
+	 * @return this Mono, but delayed until the given publisher first emits or terminates.
+	 */
+	public Mono<T> delayUntilOtherDelayError(Publisher<?> anyPublisher) {
+		Objects.requireNonNull(anyPublisher, "anyPublisher required");
+		if (this instanceof MonoDelayUntilOther) {
+			return ((MonoDelayUntilOther<T>) this).copyWithNewTrigger(anyPublisher);
+		}
+		return onAssembly(new MonoDelayUntilOther<>(true, this, anyPublisher));
+	}
+
+	/**
+	 * Subscribe to this {@link Mono} and another {@link Publisher} that is generated from
+	 * this Mono's element and which will be used as a trigger for relaying said element.
+	 * <p>
+	 * That is to say, the resulting {@link Mono} delays until this Mono's element is
+	 * emitted, generates a trigger Publisher and then delays again until the trigger
+	 * Publisher emits for the first time (or terminates empty).
+	 * <p>
+	 * Note that subsequent calls to {@link #delayUntil(Function) delayUntil variants}
+	 * are fused together (the triggers are generated and subscribed to together, when the
+	 * value is emitted). Such a chain inherits the {@code delayError} behavior of the
+	 * first use of the operator. If it is {@code delayUntil} then in case one
+	 * of the triggers errors, that error is propagated immediately downstream.
+	 *
+	 * @param triggerProvider a {@link Function} that maps this Mono's value into a
+	 * {@link Publisher} whose first emission or termination will trigger the relaying the value.
+	 *
+	 * @return this Mono, but delayed until the derived publisher first emits or terminates.
+	 */
+	public Mono<T> delayUntil(Function<? super T, ? extends Publisher<?>> triggerProvider) {
+		Objects.requireNonNull(triggerProvider, "triggerProvider required");
+		if (this instanceof MonoDelayUntil) {
+			return ((MonoDelayUntil<T>) this).copyWithNewTriggerGenerator(triggerProvider);
+		}
+		return onAssembly(new MonoDelayUntil<>(false, this, triggerProvider));
+	}
+
+	/**
+	 * Subscribe to this {@link Mono} and another {@link Publisher} that is generated from
+	 * this Mono's element and which will be used as a trigger for relaying said element.
+	 * <p>
+	 * That is to say, the resulting {@link Mono} delays until this Mono's element is
+	 * emitted, generates a trigger {@link Publisher} and then delays again until
+	 * the trigger Publisher emits for the first time (or terminates empty).
+	 * <p>
+	 * Note that subsequent calls to {@link #delayUntilDelayError(Function) delayUntil variants}
+	 * are fused together (the triggers are generated and subscribed to together, when the
+	 * value is emitted). Such a chain inherits the {@code delayError} behavior of the
+	 * first use of the operator. If it is {@code delayUntilDelayError} then in case one
+	 * of the triggers errors, that error is delayed until all publishers have triggered,
+	 * and multiple errors are thus combined into one.
+	 *
+	 * @param triggerProvider a {@link Function} that maps this Mono's value into a
+	 * {@link Publisher} whose first emission or termination will trigger the relaying the value.
+	 *
+	 * @return this Mono, but delayed until the derived publisher first emits or terminates.
+	 */
+	public Mono<T> delayUntilDelayError(Function<? super T, ? extends Publisher<?>> triggerProvider) {
+		Objects.requireNonNull(triggerProvider, "triggerProvider required");
+		if (this instanceof MonoDelayUntil) {
+			return ((MonoDelayUntil<T>) this).copyWithNewTriggerGenerator(triggerProvider);
+		}
+		return onAssembly(new MonoDelayUntil<>(true, this, triggerProvider));
+	}
+
+	/**
 	 * Delay the {@link Mono#subscribe(Subscriber) subscription} to this {@link Mono} source until the given
 	 * period elapses.
 	 *
@@ -3011,13 +3115,11 @@ public abstract class Mono<T> implements Publisher<T> {
 	 * @param anyPublisher the publisher which first emission or termination will trigger
 	 * the emission of this Mono's value.
 	 * @return this Mono, but delayed until the given publisher first emits or terminates.
+	 * @deprecated use {@link #delayUntilOther(Publisher)}, will be removed in 3.1.0.RELEASE
 	 */
+	@Deprecated
 	public Mono<T> untilOther(Publisher<?> anyPublisher) {
-		Objects.requireNonNull(anyPublisher, "anyPublisher required");
-		if (this instanceof MonoUntilOther) {
-			return ((MonoUntilOther<T>) this).addTrigger(anyPublisher);
-		}
-		return onAssembly(new MonoUntilOther<>(false, this, anyPublisher));
+		return delayUntilOther(anyPublisher);
 	}
 
 	/**
@@ -3030,64 +3132,11 @@ public abstract class Mono<T> implements Publisher<T> {
 	 * @param anyPublisher the publisher which first emission or termination will trigger
 	 * the emission of this Mono's value.
 	 * @return this Mono, but delayed until the given publisher first emits or terminates.
+	 * @deprecated use {@link #delayUntilOtherDelayError(Publisher)}, will be removed in 3.1.0.RELEASE
 	 */
+	@Deprecated
 	public Mono<T> untilOtherDelayError(Publisher<?> anyPublisher) {
-		Objects.requireNonNull(anyPublisher, "anyPublisher required");
-		if (this instanceof MonoUntilOther) {
-			return ((MonoUntilOther<T>) this).addTrigger(anyPublisher);
-		}
-		return onAssembly(new MonoUntilOther<>(true, this, anyPublisher));
-	}
-
-	/**
-	 * Subscribe to this {@link Mono} and another {@link Publisher} that is generated from
-	 * this Mono's element and which will be used as a trigger for relaying said element.
-	 * <p>
-	 * That is to say, the resulting {@link Mono} delays until this Mono's element is
-	 * emitted, generates a trigger Publisher and then delays again until the trigger
-	 * Publisher emits for the first time (or terminates empty).
-	 * <p>
-	 * Subsequent calls to {@link #untilOtherMap(Function) this operator} are
-	 * fused together (the triggers are generated and subscribed to together, when the
-	 * value is emitted).
-	 *
-	 * @param triggerProvider a {@link Function} that maps this Mono's value into a
-	 * {@link Publisher} whose first emission or termination will trigger the relaying the value.
-	 *
-	 * @return this Mono, but delayed until the derived publisher first emits or terminates.
-	 */
-	public Mono<T> untilOtherMap(Function<? super T, ? extends Publisher<?>> triggerProvider) {
-		Objects.requireNonNull(triggerProvider, "triggerProvider required");
-		if (this instanceof MonoUntilOtherMap) {
-			return ((MonoUntilOtherMap<T>) this).addTriggerGenerator(triggerProvider);
-		}
-		return onAssembly(new MonoUntilOtherMap<>(false, this, triggerProvider));
-	}
-
-	/**
-	 * Subscribe to this {@link Mono} and another {@link Publisher} that is generated from
-	 * this Mono's element and which will be used as a trigger for relaying said element.
-	 * <p>
-	 * That is to say, the resulting {@link Mono} delays until this Mono's element is
-	 * emitted, generates a trigger {@link Publisher} and then delays again until
-	 * the trigger Publisher emits for the first time (or terminates empty).
-	 * <p>
-	 * Subsequent calls to {@link #untilOtherMapDelayError(Function) this operator} are
-	 * fused together (the triggers are generated and subscribed to together, when the
-	 * value is emitted). In case one of the triggers errors, that error is delayed until
-	 * all publishers have triggered, and multiple errors are thus combined into one.
-	 *
-	 * @param triggerProvider a {@link Function} that maps this Mono's value into a
-	 * {@link Publisher} whose first emission or termination will trigger the relaying the value.
-	 *
-	 * @return this Mono, but delayed until the derived publisher first emits or terminates.
-	 */
-	public Mono<T> untilOtherMapDelayError(Function<? super T, ? extends Publisher<?>> triggerProvider) {
-		Objects.requireNonNull(triggerProvider, "triggerProvider required");
-		if (this instanceof MonoUntilOtherMap) {
-			return ((MonoUntilOtherMap<T>) this).addTriggerGenerator(triggerProvider);
-		}
-		return onAssembly(new MonoUntilOtherMap<>(true, this, triggerProvider));
+		return delayUntilOtherDelayError(anyPublisher);
 	}
 
 	/**

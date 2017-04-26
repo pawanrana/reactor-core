@@ -18,8 +18,6 @@ package reactor.core.publisher;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 
 import org.junit.Test;
 import org.reactivestreams.Publisher;
@@ -27,13 +25,12 @@ import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class MonoUntilOtherMapTest {
+public class MonoDelayUntilOtherTest {
 
 	@Test
 	public void testMonoValuedAndPublisherVoid() {
 		Publisher<Void> voidPublisher = Mono.fromRunnable(() -> { });
-		
-		StepVerifier.create(new MonoUntilOtherMap<>(false, Mono.just("foo"), a -> voidPublisher))
+		StepVerifier.create(new MonoDelayUntilOther<>(false, Mono.just("foo"), voidPublisher))
 		            .expectNext("foo")
 		            .verifyComplete();
 	}
@@ -41,15 +38,15 @@ public class MonoUntilOtherMapTest {
 	@Test
 	public void testMonoEmptyAndPublisherVoid() {
 		Publisher<Void> voidPublisher = Mono.fromRunnable(() -> { });
-		StepVerifier.create(new MonoUntilOtherMap<>(false, Mono.<String>empty(), a -> voidPublisher))
+		StepVerifier.create(new MonoDelayUntilOther<>(false, Mono.<String>empty(), voidPublisher))
 		            .verifyComplete();
 	}
 
 	@Test
 	public void triggerSequenceWithDelays() {
-		Duration duration = StepVerifier.create(new MonoUntilOtherMap<>(false,
+		Duration duration = StepVerifier.create(new MonoDelayUntilOther<>(false,
 				Mono.just("foo"),
-				a -> Flux.just(1, 2, 3).hide().delayElements(Duration.ofMillis(500))))
+				Flux.just(1, 2, 3).hide().delayElements(Duration.ofMillis(500))))
 		            .expectNext("foo")
 		            .verifyComplete();
 
@@ -59,9 +56,9 @@ public class MonoUntilOtherMapTest {
 	@Test
 	public void triggerSequenceHasMultipleValuesCancelled() {
 		AtomicBoolean triggerCancelled = new AtomicBoolean();
-		StepVerifier.create(new MonoUntilOtherMap<>(false,
+		StepVerifier.create(new MonoDelayUntilOther<>(false,
 				Mono.just("foo"),
-				a -> Flux.just(1, 2, 3).hide()
+				Flux.just(1, 2, 3).hide()
 				    .doOnCancel(() -> triggerCancelled.set(true))))
 		            .expectNext("foo")
 		            .verifyComplete();
@@ -71,9 +68,9 @@ public class MonoUntilOtherMapTest {
 	@Test
 	public void triggerSequenceHasSingleValueNotCancelled() {
 		AtomicBoolean triggerCancelled = new AtomicBoolean();
-		StepVerifier.create(new MonoUntilOtherMap<>(false,
+		StepVerifier.create(new MonoDelayUntilOther<>(false,
 				Mono.just("foo"),
-				a -> Mono.just(1)
+				Mono.just(1)
 				    .doOnCancel(() -> triggerCancelled.set(true))))
 		            .expectNext("foo")
 		            .verifyComplete();
@@ -82,9 +79,9 @@ public class MonoUntilOtherMapTest {
 
 	@Test
 	public void triggerSequenceDoneFirst() {
-		StepVerifier.withVirtualTime(() -> new MonoUntilOtherMap<>(false,
+		StepVerifier.withVirtualTime(() -> new MonoDelayUntilOther<>(false,
 				Mono.delay(Duration.ofSeconds(2)),
-				a -> Mono.just("foo")))
+				Mono.just("foo")))
 		            .expectSubscription()
 		            .expectNoEvent(Duration.ofSeconds(2))
 		            .expectNext(0L)
@@ -93,55 +90,44 @@ public class MonoUntilOtherMapTest {
 
 	@Test
 	public void sourceHasError() {
-		StepVerifier.create(new MonoUntilOtherMap<>(false,
+		StepVerifier.create(new MonoDelayUntilOther<>(false,
 				Mono.<String>error(new IllegalStateException("boom")),
-				a -> Mono.just("foo")))
+				Mono.just("foo")))
 		            .verifyErrorMessage("boom");
 	}
 
 	@Test
 	public void triggerHasError() {
-		StepVerifier.create(new MonoUntilOtherMap<>(false,
+		StepVerifier.create(new MonoDelayUntilOther<>(false,
 				Mono.just("foo"),
-				a -> Mono.<String>error(new IllegalStateException("boom"))))
+				Mono.<String>error(new IllegalStateException("boom"))))
 		            .verifyErrorMessage("boom");
 	}
 
 	@Test
 	public void sourceAndTriggerHaveErrorsNotDelayed() {
-		StepVerifier.create(new MonoUntilOtherMap<>(false,
+		StepVerifier.create(new MonoDelayUntilOther<>(false,
 				Mono.<String>error(new IllegalStateException("boom1")),
-				a -> Mono.<Integer>error(new IllegalStateException("boom2"))))
+				Mono.<Integer>error(new IllegalStateException("boom2"))))
 		            .verifyErrorMessage("boom1");
 	}
 
 	@Test
-	public void sourceAndTriggerHaveErrorsDelayedShortCircuits() {
+	public void sourceAndTriggerHaveErrorsDelayed() {
 		IllegalStateException boom1 = new IllegalStateException("boom1");
 		IllegalStateException boom2 = new IllegalStateException("boom2");
-		StepVerifier.create(new MonoUntilOtherMap<>(true,
+		StepVerifier.create(new MonoDelayUntilOther<>(true,
 				Mono.<String>error(boom1),
-				a -> Mono.<Integer>error(boom2)))
-		            .verifyErrorMessage("boom1");
-	}
-	
-	@Test
-	public void multipleTriggersWithErrorDelayed() {
-		IllegalStateException boom1 = new IllegalStateException("boom1");
-		IllegalStateException boom2 = new IllegalStateException("boom2");
-		StepVerifier.create(new MonoUntilOtherMap<>(true,
-				Mono.just("ok"), a -> Mono.<Integer>error(boom1))
-				.untilOtherMapDelayError(a -> Mono.error(boom2))
-		)
+				Mono.<Integer>error(boom2)))
 		            .verifyErrorMatches(e -> e.getMessage().equals("Multiple errors") &&
 				            e.getSuppressed()[0] == boom1 &&
 				            e.getSuppressed()[1] == boom2);
 	}
 
 	@Test
-	public void testAPIUntilOtherMap() {
+	public void testAPIDelayUntilOther() {
 		StepVerifier.withVirtualTime(() -> Mono.just("foo")
-		                                       .untilOtherMap(a -> Mono.delay(Duration.ofSeconds(2))))
+		                                       .delayUntilOther(Mono.delay(Duration.ofSeconds(2))))
 		            .expectSubscription()
 		            .expectNoEvent(Duration.ofSeconds(2))
 		            .expectNext("foo")
@@ -149,18 +135,18 @@ public class MonoUntilOtherMapTest {
 	}
 
 	@Test
-	public void testAPIUntilOtherMapErrorsImmediately() {
+	public void testAPIDelayUntilOtherErrorsImmediately() {
 		IllegalArgumentException boom = new IllegalArgumentException("boom");
 		StepVerifier.create(Mono.error(boom)
-		                        .untilOtherMap(a -> Mono.delay(Duration.ofSeconds(2))))
+		                        .delayUntilOther(Mono.delay(Duration.ofSeconds(2))))
 		            .expectErrorMessage("boom")
 		            .verify(Duration.ofMillis(200)); //at least, less than 2s
 	}
 
 	@Test
-	public void testAPIUntilOtherMapDelayErrorNoError() {
+	public void testAPIDelayUntilOtherDelayErrorNoError() {
 		StepVerifier.withVirtualTime(() -> Mono.just("foo")
-		                                       .untilOtherMapDelayError(a -> Mono.delay(Duration.ofSeconds(2))))
+		                                       .delayUntilOtherDelayError(Mono.delay(Duration.ofSeconds(2))))
 		            .expectSubscription()
 		            .expectNoEvent(Duration.ofSeconds(2))
 		            .expectNext("foo")
@@ -168,12 +154,11 @@ public class MonoUntilOtherMapTest {
 	}
 
 	@Test
-	public void testAPIUntilOtherMapDelayErrorWaitsOtherTriggers() {
+	public void testAPIDelayUntilOtherDelayErrorWaitsOtherTriggers() {
 		IllegalArgumentException boom = new IllegalArgumentException("boom");
 
-		StepVerifier.withVirtualTime(() -> Mono.just("ok")
-		                                       .untilOtherMapDelayError(a -> Mono.error(boom))
-		                                       .untilOtherMapDelayError(a -> Mono.delay(Duration.ofSeconds(2))))
+		StepVerifier.withVirtualTime(() -> Mono.error(boom)
+		                                       .delayUntilOtherDelayError(Mono.delay(Duration.ofSeconds(2))))
 		            .expectSubscription()
 		            .expectNoEvent(Duration.ofSeconds(2))
 		            .verifyErrorMessage("boom");
@@ -183,16 +168,16 @@ public class MonoUntilOtherMapTest {
 	public void testAPIchainingCombines() {
 		Mono<String> source = Mono.just("foo");
 
-		Function<String, Flux<Integer>> generator1 = a -> Flux.just(1, 2, 3);
-		Function<Object, Mono<Long>> generator2 = a -> Mono.delay(Duration.ofMillis(800));
+		Flux<Integer> trigger1 = Flux.just(1, 2, 3);
+		Mono<Long> trigger2 = Mono.delay(Duration.ofMillis(800));
 
-		MonoUntilOtherMap<String> until1 = (MonoUntilOtherMap<String>) source.untilOtherMap(generator1);
-		MonoUntilOtherMap<String> until2 = (MonoUntilOtherMap<String>) until1.untilOtherMap(generator2);
+		MonoDelayUntilOther<String> until1 = (MonoDelayUntilOther<String>) source.delayUntilOther(trigger1);
+		MonoDelayUntilOther<String> until2 = (MonoDelayUntilOther<String>) until1.delayUntilOther(trigger2);
 
 		assertThat(until1).isNotSameAs(until2);
 		assertThat(until1.source).isSameAs(until2.source);
-		assertThat(until1.otherGenerators).containsExactly(generator1);
-		assertThat(until2.otherGenerators).containsExactly(generator1, generator2);
+		assertThat(until1.others).containsExactly(trigger1);
+		assertThat(until2.others).containsExactly(trigger1, trigger2);
 
 		StepVerifier.create(until2)
 		            .expectSubscription()
@@ -206,54 +191,21 @@ public class MonoUntilOtherMapTest {
 	public void testAPIchainingCombinesWithFirstDelayErrorParameter() {
 		Mono<String> source = Mono.just("foo");
 
-		Function<String, Mono<String>> generator1 = a -> Mono.error(new IllegalArgumentException("boom"));
-		Function<Object, Mono<Long>> generator2 = a -> Mono.delay(Duration.ofMillis(800));
+		Mono<String> trigger1 = Mono.error(new IllegalArgumentException("boom"));
+		Mono<Long> trigger2 = Mono.delay(Duration.ofMillis(800));
 
-		MonoUntilOtherMap<String> until1 = (MonoUntilOtherMap<String>) source.untilOtherMapDelayError(generator1);
-		MonoUntilOtherMap<String> until2 = (MonoUntilOtherMap<String>) until1.untilOtherMap(generator2);
+		MonoDelayUntilOther<String> until1 = (MonoDelayUntilOther<String>) source.delayUntilOtherDelayError(trigger1);
+		MonoDelayUntilOther<String> until2 = (MonoDelayUntilOther<String>) until1.delayUntilOther(trigger2);
 
 		assertThat(until1).isNotSameAs(until2);
 		assertThat(until1.source).isSameAs(until2.source);
-		assertThat(until1.otherGenerators).containsExactly(generator1);
-		assertThat(until2.otherGenerators).containsExactly(generator1, generator2);
+		assertThat(until1.others).containsExactly(trigger1);
+		assertThat(until2.others).containsExactly(trigger1, trigger2);
 
 		StepVerifier.create(until2)
 		            .expectSubscription()
 		            .expectNoEvent(Duration.ofMillis(700))
 		            .thenAwait(Duration.ofMillis(100))
 		            .verifyErrorMessage("boom");
-	}
-
-	@Test
-	public void testAPIchainingUsesLongestDelayAfterValueGenerated() {
-		AtomicInteger generator1Used = new AtomicInteger();
-		AtomicInteger generator2Used = new AtomicInteger();
-
-		Function<String, Mono<Long>> generator1 = a -> {
-			generator1Used.incrementAndGet();
-			return Mono.delay(Duration.ofMillis(400));
-		};
-		Function<Object, Mono<Long>> generator2 = a -> {
-			generator2Used.incrementAndGet();
-			return Mono.delay(Duration.ofMillis(800));
-		};
-
-		StepVerifier.withVirtualTime(() -> Mono.just("foo")
-		                              .delayElement(Duration.ofSeconds(3))
-		                              .untilOtherMap(generator1)
-		                              .untilOtherMap(generator2))
-		            .expectSubscription()
-		            .expectNoEvent(Duration.ofMillis(2900))
-		            .then(() -> assertThat(generator1Used.get()).isZero())
-		            .then(() -> assertThat(generator2Used.get()).isZero())
-		            .expectNoEvent(Duration.ofMillis(100))
-		            .then(() -> assertThat(generator1Used.get()).isEqualTo(1))
-		            .then(() -> assertThat(generator2Used.get()).isEqualTo(1))
-		            .expectNoEvent(Duration.ofMillis(700))
-		            .thenAwait(Duration.ofMillis(100))
-		            .expectNext("foo")
-		            .then(() -> assertThat(generator1Used.get()).isEqualTo(1))
-		            .then(() -> assertThat(generator2Used.get()).isEqualTo(1))
-		            .verifyComplete();
 	}
 }

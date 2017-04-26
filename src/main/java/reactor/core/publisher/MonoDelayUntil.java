@@ -37,7 +37,7 @@ import reactor.core.Scannable;
  *
  * @author Simon Baslé
  */
-final class MonoUntilOtherMap<T> extends Mono<T> {
+final class MonoDelayUntil<T> extends Mono<T> {
 
 	final boolean delayError;
 
@@ -45,7 +45,7 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 
 	Function<? super T, ? extends Publisher<?>>[] otherGenerators;
 
-	MonoUntilOtherMap(boolean delayError,
+	MonoDelayUntil(boolean delayError,
 			Mono<T> monoSource,
 			Function<? super T, ? extends Publisher<?>> triggerGenerator) {
 		this.delayError = delayError;
@@ -53,7 +53,7 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 		this.otherGenerators = new Function[] { Objects.requireNonNull(triggerGenerator, "triggerGenerator")};
 	}
 
-	private MonoUntilOtherMap(boolean delayError,
+	private MonoDelayUntil(boolean delayError,
 			Mono<T> monoSource,
 			Function<? super T, ? extends Publisher<?>>[] triggerGenerators) {
 		this.delayError = delayError;
@@ -64,26 +64,26 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 	/**
 	 * Add a trigger generator to wait for.
 	 * @param triggerGenerator
-	 * @return a new {@link MonoUntilOtherMap} instance with same source but additional trigger generator
+	 * @return a new {@link MonoDelayUntil} instance with same source but additional trigger generator
 	 */
-	MonoUntilOtherMap<T> addTriggerGenerator(Function<? super T, ? extends Publisher<?>> triggerGenerator) {
+	MonoDelayUntil<T> copyWithNewTriggerGenerator(Function<? super T, ? extends Publisher<?>> triggerGenerator) {
 		Objects.requireNonNull(triggerGenerator, "triggerGenerator");
 		Function<? super T, ? extends Publisher<?>>[] oldTriggers = this.otherGenerators;
 		Function<? super T, ? extends Publisher<?>>[] newTriggers = new Function[oldTriggers.length + 1];
 		System.arraycopy(oldTriggers, 0, newTriggers, 0, oldTriggers.length);
 		newTriggers[oldTriggers.length] = triggerGenerator;
-		return new MonoUntilOtherMap<T>(this.delayError, this.source, newTriggers);
+		return new MonoDelayUntil<T>(this.delayError, this.source, newTriggers);
 	}
 
 	@Override
 	public void subscribe(Subscriber<? super T> s) {
-		UntilOtherMapCoordinator<T> parent = new UntilOtherMapCoordinator<>(s,
+		DelayUntilCoordinator<T> parent = new DelayUntilCoordinator<>(s,
 				delayError, otherGenerators);
 		s.onSubscribe(parent);
 		source.subscribe(parent);
 	}
 
-	static final class UntilOtherMapCoordinator<T>
+	static final class DelayUntilCoordinator<T>
 			extends Operators.MonoSubscriber<T, T> {
 
 		final int                                           n;
@@ -91,17 +91,17 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 		final Function<? super T, ? extends Publisher<?>>[] otherGenerators;
 
 		volatile int done;
-		static final AtomicIntegerFieldUpdater<UntilOtherMapCoordinator> DONE =
-				AtomicIntegerFieldUpdater.newUpdater(UntilOtherMapCoordinator.class, "done");
+		static final AtomicIntegerFieldUpdater<DelayUntilCoordinator> DONE =
+				AtomicIntegerFieldUpdater.newUpdater(DelayUntilCoordinator.class, "done");
 
 		volatile Subscription s;
 		@SuppressWarnings("rawtypes")
-		static final AtomicReferenceFieldUpdater<UntilOtherMapCoordinator, Subscription> S =
-				AtomicReferenceFieldUpdater.newUpdater(UntilOtherMapCoordinator.class, Subscription.class, "s");
+		static final AtomicReferenceFieldUpdater<DelayUntilCoordinator, Subscription> S =
+				AtomicReferenceFieldUpdater.newUpdater(DelayUntilCoordinator.class, Subscription.class, "s");
 
-		UntilOtherMapTrigger[] triggerSubscribers;
+		DelayUntilTrigger[] triggerSubscribers;
 
-		UntilOtherMapCoordinator(Subscriber<? super T> subscriber,
+		DelayUntilCoordinator(Subscriber<? super T> subscriber,
 				boolean delayError,
 				Function<? super T, ? extends Publisher<?>>[] otherGenerators) {
 			super(subscriber);
@@ -161,12 +161,12 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 		}
 
 		private void subscribeTriggers(T value) {
-			triggerSubscribers = new UntilOtherMapTrigger[otherGenerators.length];
+			triggerSubscribers = new DelayUntilTrigger[otherGenerators.length];
 			for (int i = 0; i < otherGenerators.length; i++) {
 				Function<? super T, ? extends Publisher<?>> generator = otherGenerators[i];
 				Publisher<?> p = generator.apply(value);
 				boolean cancelOnTriggerValue = !(p instanceof Mono);
-				UntilOtherMapTrigger triggerSubscriber = new UntilOtherMapTrigger(this, cancelOnTriggerValue);
+				DelayUntilTrigger triggerSubscriber = new DelayUntilTrigger(this, cancelOnTriggerValue);
 
 				this.triggerSubscribers[i] = triggerSubscriber;
 				p.subscribe(triggerSubscriber);
@@ -195,7 +195,7 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 
 			//check for errors in the triggers
 			for (int i = 0; i < n; i++) {
-				UntilOtherMapTrigger mt = triggerSubscribers[i];
+				DelayUntilTrigger mt = triggerSubscribers[i];
 				Throwable e = mt.error;
 				if (e != null) {
 					if (compositeError != null) {
@@ -231,27 +231,27 @@ final class MonoUntilOtherMap<T> extends Mono<T> {
 				Operators.terminate(S, this);
 				//...but triggerSubscribers could be partially initialized
 				for (int i = 0; i < triggerSubscribers.length; i++) {
-					UntilOtherMapTrigger ts = triggerSubscribers[i];
+					DelayUntilTrigger ts = triggerSubscribers[i];
 					if (ts != null) ts.cancel();
 				}
 			}
 		}
 	}
 
-	static final class UntilOtherMapTrigger<T> implements InnerConsumer<T> {
+	static final class DelayUntilTrigger<T> implements InnerConsumer<T> {
 
-		final UntilOtherMapCoordinator<?> parent;
-		final boolean                     cancelOnTriggerValue;
+		final DelayUntilCoordinator<?> parent;
+		final boolean                  cancelOnTriggerValue;
 
 		volatile Subscription s;
 		@SuppressWarnings("rawtypes")
-		static final AtomicReferenceFieldUpdater<UntilOtherMapTrigger, Subscription> S =
-				AtomicReferenceFieldUpdater.newUpdater(UntilOtherMapTrigger.class, Subscription.class, "s");
+		static final AtomicReferenceFieldUpdater<DelayUntilTrigger, Subscription> S =
+				AtomicReferenceFieldUpdater.newUpdater(DelayUntilTrigger.class, Subscription.class, "s");
 
 		boolean done;
 		Throwable error;
 
-		UntilOtherMapTrigger(UntilOtherMapCoordinator<?> parent,
+		DelayUntilTrigger(DelayUntilCoordinator<?> parent,
 				boolean cancelOnTriggerValue) {
 			this.parent = parent;
 			this.cancelOnTriggerValue = cancelOnTriggerValue;
