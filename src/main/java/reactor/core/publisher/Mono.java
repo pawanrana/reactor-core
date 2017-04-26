@@ -1458,11 +1458,14 @@ public abstract class Mono<T> implements Publisher<T> {
 	 * Such a chain inherits the {@code delayError} behavior of the first use of the
 	 * operator. If it is {@code delayUntilOther} then in case one of the triggers errors,
 	 * that error is propagated immediately downstream.
+	 * <p>
+	 * <img class="marble" src="https://raw.githubusercontent.com/reactor/reactor-core/master/src/docs/marble/delayUntilOther.png" alt="">
 	 *
 	 * @param anyPublisher the publisher which first emission or termination will trigger
 	 * the emission of this Mono's value.
 	 * @return this Mono, but delayed until the given publisher first emits or terminates.
 	 */
+	//TODO update the marble URL to a tag pre-release
 	public Mono<T> delayUntilOther(Publisher<?> anyPublisher) {
 		Objects.requireNonNull(anyPublisher, "anyPublisher required");
 		if (this instanceof MonoDelayUntilOther) {
@@ -1484,11 +1487,14 @@ public abstract class Mono<T> implements Publisher<T> {
 	 * operator. If it is {@code delayUntilOtherDelayError} then in case one
 	 * of the triggers errors, that error is delayed until all publishers have triggered,
 	 * and multiple errors are thus combined into one.
+	 * <p>
+	 * <img class="marble" src="https://raw.githubusercontent.com/reactor/reactor-core/master/src/docs/marble/delayUntilOther.png" alt="">
 	 *
 	 * @param anyPublisher the publisher which first emission or termination will trigger
 	 * the emission of this Mono's value.
 	 * @return this Mono, but delayed until the given publisher first emits or terminates.
 	 */
+	//TODO update the marble URL to a tag pre-release
 	public Mono<T> delayUntilOtherDelayError(Publisher<?> anyPublisher) {
 		Objects.requireNonNull(anyPublisher, "anyPublisher required");
 		if (this instanceof MonoDelayUntilOther) {
@@ -1510,12 +1516,15 @@ public abstract class Mono<T> implements Publisher<T> {
 	 * value is emitted). Such a chain inherits the {@code delayError} behavior of the
 	 * first use of the operator. If it is {@code delayUntil} then in case one
 	 * of the triggers errors, that error is propagated immediately downstream.
+	 * <p>
+	 * <img class="marble" src="https://raw.githubusercontent.com/reactor/reactor-core/master/src/docs/marble/delayUntil.png" alt="">
 	 *
 	 * @param triggerProvider a {@link Function} that maps this Mono's value into a
 	 * {@link Publisher} whose first emission or termination will trigger the relaying the value.
 	 *
 	 * @return this Mono, but delayed until the derived publisher first emits or terminates.
 	 */
+	//TODO update the marble URL to a tag pre-release
 	public Mono<T> delayUntil(Function<? super T, ? extends Publisher<?>> triggerProvider) {
 		Objects.requireNonNull(triggerProvider, "triggerProvider required");
 		if (this instanceof MonoDelayUntil) {
@@ -1538,12 +1547,15 @@ public abstract class Mono<T> implements Publisher<T> {
 	 * first use of the operator. If it is {@code delayUntilDelayError} then in case one
 	 * of the triggers errors, that error is delayed until all publishers have triggered,
 	 * and multiple errors are thus combined into one.
+	 * <p>
+	 * <img class="marble" src="https://raw.githubusercontent.com/reactor/reactor-core/master/src/docs/marble/delayUntil.png" alt="">
 	 *
 	 * @param triggerProvider a {@link Function} that maps this Mono's value into a
 	 * {@link Publisher} whose first emission or termination will trigger the relaying the value.
 	 *
 	 * @return this Mono, but delayed until the derived publisher first emits or terminates.
 	 */
+	//TODO update the marble URL to a tag pre-release
 	public Mono<T> delayUntilDelayError(Function<? super T, ? extends Publisher<?>> triggerProvider) {
 		Objects.requireNonNull(triggerProvider, "triggerProvider required");
 		if (this instanceof MonoDelayUntil) {
